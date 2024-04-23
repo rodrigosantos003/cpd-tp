@@ -3,21 +3,32 @@ import math
 
 
 def is_prime(n):
-    for i in range(2, math.floor(math.sqrt(n))):
+    stop = math.floor(math.sqrt(n))
+    for i in primes:
+        if i > stop:
+            return True
         if n % i == 0:
             return False
     return True
 
+#primos até ao que escolhemos (neste caso 7)
+primes = [2,3,5,7]
 
 def find_max_prime(timeout):
-    max_prime = i = 1
+    primesJumps = [2, 4, 2, 4, 6, 2, 6, 4, 2, 4, 6, 6, 2, 6, 4, 2, 6, 4, 6, 8, 4, 2, 4, 2, 4, 8, 6, 4, 6, 2, 4, 6, 2, 6, 6, 4, 2, 4, 6, 2, 6, 4, 2, 4, 2, 10, 2, 10]
+    selectedJump = 0
+    
+    #max_prime tem que ser o primo a seguir ao que escolhemos (visto que queremos começar com um primo para que a sequencia de saltos funcione)
+    max_prime = i = 11
     start = time.time()
     while time.time() - start < timeout:
-        if is_prime(i) and i > max_prime:
+        if is_prime(i):
             max_prime = i
-        i += 1
+            primes.append(i)
+        i += primesJumps[selectedJump]
+        selectedJump = (selectedJump + 1) % len(primesJumps)
+        
     print(max_prime)
-
 
 if __name__ == '__main__':
     find_max_prime(5)
