@@ -1,34 +1,47 @@
+import multiprocessing
 import time
-import math
 
 
 def is_prime(n):
-    stop = math.floor(math.sqrt(n))
-    for i in primes:
-        if i > stop:
-            return True
-        if n % i == 0:
+    if n <= 1:
+        return False
+    elif n <= 3:
+        return True
+    elif n % 2 == 0 or n % 3 == 0:
+        return False
+    i = 5
+    while i * i <= n:
+        if n % i == 0 or n % (i + 2) == 0:
             return False
+        i += 6
     return True
 
-#primos até ao que escolhemos (neste caso 7)
-primes = [2,3,5,7]
 
-def find_max_prime(timeout):
-    primesJumps = [2, 4, 2, 4, 6, 2, 6, 4, 2, 4, 6, 6, 2, 6, 4, 2, 6, 4, 6, 8, 4, 2, 4, 2, 4, 8, 6, 4, 6, 2, 4, 6, 2, 6, 6, 4, 2, 4, 6, 2, 6, 4, 2, 4, 2, 10, 2, 10]
-    selectedJump = 0
-    
-    #max_prime tem que ser o primo a seguir ao que escolhemos (visto que queremos começar com um primo para que a sequencia de saltos funcione)
-    max_prime = i = 11
-    start = time.time()
-    while time.time() - start < timeout:
-        if is_prime(i):
-            max_prime = i
-            primes.append(i)
-        i += primesJumps[selectedJump]
-        selectedJump = (selectedJump + 1) % len(primesJumps)
-        
-    print(max_prime)
+def find_max_prime(timeout, shared_max_prime, value):
+    start_time = time.time()
+
+    while time.time() - start_time < timeout:
+        if is_prime(value):
+            with shared_max_prime.get_lock():
+                if value > shared_max_prime.value:
+                    shared_max_prime.value = value
+                else:
+                    value = shared_max_prime.value
+
+        value += 2
+
 
 if __name__ == '__main__':
-    find_max_prime(5)
+    max_prime = multiprocessing.Value('i', 2)
+
+    processes = []
+
+    for x in range(4):
+        p = multiprocessing.Process(target=find_max_prime, args=[5, max_prime, (10 ** (x + 7) + 1)])
+        processes.append(p)
+        p.start()
+
+    for p in processes:
+        p.join()
+
+    print(max_prime.value, "(", len(str(max_prime.value)), ")")
