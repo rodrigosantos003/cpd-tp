@@ -1,3 +1,4 @@
+import math
 import multiprocessing
 import time
 
@@ -5,43 +6,47 @@ import time
 def is_prime(n):
     if n <= 1:
         return False
-    elif n <= 3:
+    if n == 2 or n == 3:
         return True
-    elif n % 2 == 0 or n % 3 == 0:
+    if n % 2 == 0:
         return False
-    i = 5
-    while i * i <= n:
-        if n % i == 0 or n % (i + 2) == 0:
+    for i in range(3, int(math.sqrt(n)) + 1, 2):
+        if n % i == 0:
             return False
-        i += 6
     return True
 
 
-def find_max_prime(timeout, shared_max_prime, value):
+def find_max_prime(timeout, shared_max_prime, lock, value, step):
     start_time = time.time()
 
     while time.time() - start_time < timeout:
-        if is_prime(value):
-            with shared_max_prime.get_lock():
-                if value > shared_max_prime.value:
+        if value > shared_max_prime.value:
+            if is_prime(value):
+                with lock:
                     shared_max_prime.value = value
-                else:
-                    value = shared_max_prime.value
+        else:
+            value = shared_max_prime.value
 
-        value += 2
+        value += step
 
 
 if __name__ == '__main__':
-    max_prime = multiprocessing.Value('i', 2)
+    with multiprocessing.Manager() as manager:
+        max_prime = manager.Value('i', 1)
+        lock = manager.Lock()
+        num_processes = 8
 
-    processes = []
+        processes = []
 
-    for x in range(4):
-        p = multiprocessing.Process(target=find_max_prime, args=[5, max_prime, (10 ** (x + 7) + 1)])
-        processes.append(p)
-        p.start()
+        for x in range(num_processes):
+            step = 100 ** x
+            start_value = max_prime.value + x * step
 
-    for p in processes:
-        p.join()
+            p = multiprocessing.Process(target=find_max_prime, args=[30, max_prime, lock, start_value, step])
+            processes.append(p)
+            p.start()
 
-    print(max_prime.value, "(", len(str(max_prime.value)), ")")
+        for p in processes:
+            p.join()
+
+        print(max_prime.value, "(", len(str(max_prime.value)), ")")
