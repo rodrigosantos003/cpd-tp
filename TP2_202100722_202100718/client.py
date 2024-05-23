@@ -26,11 +26,28 @@ class JSONRPCClient:
 
     def invoke(self, method, params):
         """Invokes a remote function."""
+
         req = {
-            'Hello': 'World'
+            "jsonrpc": "2.0",
+            "method": method,
+            "params": params,
+            "id": self.ID
         }
+        self.ID += 1
         msg = self.send(json.dumps(req))
         res = json.loads(msg)
+
+        if 'error' in res:
+            error_code = res['error'].get('code')
+            error_message = res['error'].get('message')
+            if error_code == -32602:
+                raise TypeError(error_message)
+            if error_code == -32601:
+                raise AttributeError(error_message)
+
+        if 'result' in res:
+            return res['result']
+
         return res
 
     def __getattr__(self, name):
