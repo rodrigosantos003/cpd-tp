@@ -11,7 +11,6 @@ import concurrent.futures
 
 from client import JSONRPCClient
 
-
 # Define server host and port
 SERVER_HOST = '127.0.0.1'
 SERVER_PORT = 8000
@@ -191,3 +190,41 @@ class TestErrors(TestBase):
             })
 
             self.assertRaises(TypeError, future.result)
+
+
+class TestBatchRequests(TestBase):
+    """Tests for batch requests in JSON-RPC Client."""
+
+    def testBatchRequests(self):
+        """JSON-RPC client should handle batch requests correctly."""
+        batch_request = [
+            {"jsonrpc": "2.0", "method": "hello", 'id': 1},
+            {"jsonrpc": "2.0", "method": "greet", "params": ["World"], 'id': 2},
+            {"jsonrpc": "2.0", "method": "add", "params": [1, 2], 'id': 3}
+        ]
+
+        expected_responses = [
+            {"jsonrpc": "2.0", "result": "Hi!", "id": 1},
+            {"jsonrpc": "2.0", "result": "Hello World", "id": 2},
+            {"jsonrpc": "2.0", "result": 3, "id": 3}
+        ]
+
+        def handle_requests():
+            reqs = self.recv_json()
+            responses = []
+            for req in reqs:
+                if req['method'] == 'hello':
+                    responses.append({"jsonrpc": "2.0", "result": "Hi!", "id": req['id']})
+                elif req['method'] == 'greet' and req['params'] == ["World"]:
+                    responses.append({"jsonrpc": "2.0", "result": "Hello World", "id": req['id']})
+                elif req['method'] == 'add' and req['params'] == [1, 2]:
+                    responses.append({"jsonrpc": "2.0", "result": 3, "id": req['id']})
+            self.send_json(responses)
+
+        thread = threading.Thread(target=handle_requests)
+        thread.start()
+
+        res = self.client.batch(batch_request)
+        self.assertEqual(res, expected_responses)
+
+        thread.join()

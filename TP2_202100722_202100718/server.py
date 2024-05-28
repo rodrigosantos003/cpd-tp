@@ -1,8 +1,3 @@
-"""
- Simple JSON-RPC Server
-
-"""
-
 import json
 import socket
 import inspect
@@ -48,8 +43,8 @@ class JSONRPCServer:
         """Stops the server."""
         self.sock.close()
 
-    def process_msg(self, msg):
-        """Process the request message and build a response"""
+    def process_request(self, msg):
+        """Process a single JSON-RPC request."""
         res = {'jsonrpc': '2.0'}
 
         try:
@@ -95,13 +90,38 @@ class JSONRPCServer:
             res['id'] = None
             res['error'] = {'code': -32600, 'message': 'Invalid Request'}
         except KeyError:
-            res['id'] = msg['id']
+            res['id'] = msg.get('id')
             res['error'] = {'code': -32601, 'message': 'Method not found'}
         except TypeError:
-            res['id'] = msg['id']
+            res['id'] = msg.get('id')
             res['error'] = {'code': -32602, 'message': 'Invalid params'}
+        except (ArithmeticError, Exception):
+            res['id'] = msg.get('id')
+            res['error'] = {'code': -32603, 'message': 'Internal error'}
 
-        return json.dumps(res)
+        return res
+
+    def process_msg(self, msg):
+        """Process the request message and build a response"""
+        try:
+            msgs = json.loads(msg)
+        except json.JSONDecodeError:
+            return json.dumps({'jsonrpc': '2.0', 'error': {'code': -32700, 'message': 'Parse error'}, 'id': None})
+
+        if isinstance(msgs, list):
+            responses = []
+            for m in msgs:
+                response = self.process_request(json.dumps(m))
+                if response is not None:
+                    responses.append(response)
+            if not responses:
+                return None
+            return json.dumps(responses)
+        else:
+            response = self.process_request(msg)
+            if response is not None:
+                return json.dumps(response)
+            return None
 
     def handle_client(self, conn):
         """Handles the client connection."""

@@ -14,7 +14,6 @@ import unittest
 import functions
 from server import JSONRPCServer
 
-
 # Define server host and port
 SERVER_HOST = '127.0.0.1'
 SERVER_PORT = 8000
@@ -138,9 +137,11 @@ class TestRegisteredFunctions(TestBase):
 
     def testNewFunction(self):
         """Server must register new functions."""
+
         # Register new function
         def square(num):
             return num * num
+
         self.server.register('square', square)
 
         res = self.jsonrpc_req(1, 'square', [2])
@@ -148,6 +149,7 @@ class TestRegisteredFunctions(TestBase):
 
     def testRandomFunction(self):
         """Server must register new functions."""
+
         # Register new function
         def random_function(num):
             return num
@@ -236,3 +238,71 @@ class TestEdgeCases(TestBase):
         time.sleep(0.1)
         res = self.sock.recv(1024).decode()
         self.assertEqual(res, '')
+
+
+class TestExecutionErrors(TestBase):
+    """Tests for errors during function execution."""
+
+    def testFunctionRaisesException(self):
+        """Function that raises an exception should return a server error."""
+
+        def faulty_function():
+            raise Exception("An error occurred")
+
+        self.server.register('faulty', faulty_function)
+        res = self.jsonrpc_req(1, 'faulty', [])
+        self.assertEqual(res['error']['code'], -32603)
+        self.assertEqual(res['error']['message'], 'Internal error')
+
+    def testDivisionByZero(self):
+        """Function that raises a division by zero should return a server error."""
+        res = self.jsonrpc_req(1, 'div', [1, 0])
+        self.assertEqual(res['error']['code'], -32603)
+        self.assertEqual(res['error']['message'], 'Internal error')
+
+
+class TestParameterTypes(TestBase):
+    """Tests different parameter types."""
+
+    def testStringParams(self):
+        """Function should handle string parameters."""
+        res = self.jsonrpc_req(1, 'greet', ['Alice'])
+        self.assertEqual(res['result'], 'Hello Alice')
+
+    def testIntegerParams(self):
+        """Function should handle integer parameters."""
+        res = self.jsonrpc_req(1, 'add', [10, 5])
+        self.assertEqual(res['result'], 15)
+
+    def testFloatParams(self):
+        """Function should handle float parameters."""
+        res = self.jsonrpc_req(1, 'mul', [2.5, 4.2])
+        self.assertAlmostEqual(res['result'], 10.5)
+
+    def testMixedParams(self):
+        """Function should handle mixed type parameters."""
+
+        def mix(a, b, c):
+            return f"{a}-{b}-{c}"
+
+        self.server.register('mix', mix)
+        res = self.jsonrpc_req(1, 'mix', [1, "text", 3.14])
+        self.assertEqual(res['result'], '1-text-3.14')
+
+
+class TestBacthRequest(TestBase):
+    def testBatchRequest(self):
+        batch_request = [
+            {"jsonrpc": "2.0", "method": "hello", "id": 1},
+            {"jsonrpc": "2.0", "method": "greet", "params": ["World"], "id": 2},
+            {"jsonrpc": "2.0", "method": "add", "params": [1, 2], "id": 3}
+        ]
+
+        expected_response = json.dumps([
+            {"jsonrpc": "2.0", "result": "Hi!", "id": 1},
+            {"jsonrpc": "2.0", "result": "Hello World", "id": 2},
+            {"jsonrpc": "2.0", "result": 3, "id": 3}
+        ])
+
+        res = self.send_json(batch_request)
+        self.assertEqual(res, json.loads(expected_response))
