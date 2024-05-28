@@ -1,3 +1,7 @@
+"""
+ Simple JSON-RPC Client
+"""
+
 import json
 import socket
 

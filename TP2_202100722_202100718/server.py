@@ -1,3 +1,7 @@
+"""
+ Simple JSON-RPC Client
+"""
+
 import json
 import socket
 import inspect
@@ -106,8 +110,14 @@ class JSONRPCServer:
         try:
             msgs = json.loads(msg)
         except json.JSONDecodeError:
-            return json.dumps({'jsonrpc': '2.0', 'error': {'code': -32700, 'message': 'Parse error'}, 'id': None})
+            return json.dumps(
+                {'jsonrpc': '2.0',
+                 'error': {
+                     'code': -32700,
+                     'message': 'Parse error'},
+                 'id': None})
 
+        # Check if there are multiple requests on the message
         if isinstance(msgs, list):
             responses = []
             for m in msgs:
@@ -117,11 +127,11 @@ class JSONRPCServer:
             if not responses:
                 return None
             return json.dumps(responses)
-        else:
-            response = self.process_request(msg)
-            if response is not None:
-                return json.dumps(response)
-            return None
+
+        response = self.process_request(msg)
+        if response is not None:
+            return json.dumps(response)
+        return None
 
     def handle_client(self, conn):
         """Handles the client connection."""
@@ -130,7 +140,10 @@ class JSONRPCServer:
         msg = conn.recv(1024).decode()
         print('Received:', msg)
 
+        # Process message
         res = self.process_msg(msg)
+
+        # Send response
         if res is not None:
             conn.send(res.encode())
 
