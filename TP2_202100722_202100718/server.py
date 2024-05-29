@@ -35,7 +35,6 @@ class JSONRPCServer:
                 conn, _ = self.sock.accept()
                 self.handle_client(conn)
 
-                # Close client connection
                 conn.close()
 
         except ConnectionAbortedError:
@@ -110,12 +109,11 @@ class JSONRPCServer:
         try:
             msgs = json.loads(msg)
         except json.JSONDecodeError:
-            return json.dumps(
-                {'jsonrpc': '2.0',
-                 'error': {
-                     'code': -32700,
-                     'message': 'Parse error'},
-                 'id': None})
+            return {'jsonrpc': '2.0',
+                    'error': {
+                        'code': -32700,
+                        'message': 'Parse error'},
+                    'id': None}
 
         # Check if there are multiple requests on the message
         if isinstance(msgs, list):
@@ -126,26 +124,37 @@ class JSONRPCServer:
                     responses.append(response)
             if not responses:
                 return None
-            return json.dumps(responses)
+            return responses
 
         response = self.process_request(msg)
         if response is not None:
-            return json.dumps(response)
+            return response
         return None
 
     def handle_client(self, conn):
         """Handles the client connection."""
+        keepAlive = True
+        while keepAlive:
+            #Receive message
+            msg = conn.recv(1024).decode()
+            print('Received:', msg)
 
-        # Receive message
-        msg = conn.recv(1024).decode()
-        print('Received:', msg)
+            #Process message
+            res = self.process_msg(msg)
 
-        # Process message
-        res = self.process_msg(msg)
+            #Send response
+            if res is not None:
+                conn.send(json.dumps(res).encode())
 
-        # Send response
-        if res is not None:
-            conn.send(res.encode())
+            #Check if the client wants to keep the connection alive
+            if res["result"] == "keepAlive":
+                keepAlive = True
+            else:
+                keepAlive = False
+
+            #Check if the client wants to exit
+            if res["result"] == "exit":
+                keepAlive = False
 
 
 if __name__ == "__main__":
@@ -159,6 +168,8 @@ if __name__ == "__main__":
     server.register('sub', functions.sub)
     server.register('mul', functions.mul)
     server.register('div', functions.div)
+    server.register('exit', functions.exit)
+    server.register('keepAlive', functions.keepAlive)
 
     # Start the server
     server.start()

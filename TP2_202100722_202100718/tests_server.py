@@ -306,3 +306,18 @@ class TestBacthRequest(TestBase):
 
         res = self.send_json(batch_request)
         self.assertEqual(res, json.loads(expected_response))
+
+
+
+class TestExitCommand(TestBase):
+    def testExitClosesConnection(self):
+        self.send_json({"jsonrpc": "2.0", "method": "keepAlive", "id": 1})
+        try:
+            # Envia o comando exit e espera a conexão ser fechada pelo servidor
+            self.send_json({"jsonrpc": "2.0", "method": "exit", "id": 1})
+        except ConnectionResetError:
+            pass  # Ignora a exceção porque é esperado que a conexão seja fechada
+
+        # Tenta enviar outra mensagem após o comando exit e captura a exceção
+        with self.assertRaises((ConnectionResetError, socket.error)):
+            self.send_json({"jsonrpc": "2.0", "method": "hello", "id": 2})
