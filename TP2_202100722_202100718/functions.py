@@ -31,8 +31,10 @@ def div(a, b):
 def add3(a, b, c):
     return a + b + c
 
-def exit():
-    return "exit"
 
 def keepAlive():
     return "keepAlive"
+
+
+def closeConnection():
+    return "exit"

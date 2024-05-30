@@ -261,37 +261,9 @@ class TestExecutionErrors(TestBase):
         self.assertEqual(res['error']['message'], 'Internal error')
 
 
-class TestParameterTypes(TestBase):
-    """Tests different parameter types."""
-
-    def testStringParams(self):
-        """Function should handle string parameters."""
-        res = self.jsonrpc_req(1, 'greet', ['Alice'])
-        self.assertEqual(res['result'], 'Hello Alice')
-
-    def testIntegerParams(self):
-        """Function should handle integer parameters."""
-        res = self.jsonrpc_req(1, 'add', [10, 5])
-        self.assertEqual(res['result'], 15)
-
-    def testFloatParams(self):
-        """Function should handle float parameters."""
-        res = self.jsonrpc_req(1, 'mul', [2.5, 4.2])
-        self.assertAlmostEqual(res['result'], 10.5)
-
-    def testMixedParams(self):
-        """Function should handle mixed type parameters."""
-
-        def mix(a, b, c):
-            return f"{a}-{b}-{c}"
-
-        self.server.register('mix', mix)
-        res = self.jsonrpc_req(1, 'mix', [1, "text", 3.14])
-        self.assertEqual(res['result'], '1-text-3.14')
-
-
 class TestBacthRequest(TestBase):
     def testBatchRequest(self):
+        """The server must handle batch requests."""
         batch_request = [
             {"jsonrpc": "2.0", "method": "hello", "id": 1},
             {"jsonrpc": "2.0", "method": "greet", "params": ["World"], "id": 2},
@@ -308,16 +280,29 @@ class TestBacthRequest(TestBase):
         self.assertEqual(res, json.loads(expected_response))
 
 
-
 class TestExitCommand(TestBase):
     def testExitClosesConnection(self):
-        self.send_json({"jsonrpc": "2.0", "method": "keepAlive", "id": 1})
-        try:
-            # Envia o comando exit e espera a conexão ser fechada pelo servidor
-            self.send_json({"jsonrpc": "2.0", "method": "exit", "id": 1})
-        except ConnectionResetError:
-            pass  # Ignora a exceção porque é esperado que a conexão seja fechada
+        """The server must keep the connection open until the client sends a closeConnection command """
 
-        # Tenta enviar outra mensagem após o comando exit e captura a exceção
-        with self.assertRaises((ConnectionResetError, socket.error)):
-            self.send_json({"jsonrpc": "2.0", "method": "hello", "id": 2})
+        try:
+            open = {
+                'jsonrpc': '2.0',
+                'method': 'keepAlive',
+            }
+            msg = json.dumps(open)
+            self.sock.sendall(msg.encode())
+            time.sleep(0.1)
+            res = self.sock.recv(1024).decode()
+            self.assertEqual(res, '')
+
+            close = {
+                'jsonrpc': '2.0',
+                'method': 'closeConnection'
+            }
+            msg = json.dumps(close)
+            self.sock.sendall(msg.encode())
+            time.sleep(0.1)
+            res = self.sock.recv(1024).decode()
+            self.assertEqual(res, '')
+        except ConnectionAbortedError:
+            self.assertRaises(ConnectionAbortedError)

@@ -60,9 +60,8 @@ class JSONRPCServer:
             method = msg['method']
 
             # Check if the request is a JSON-RPC notification
-            if 'id' not in msg:
-                return None
-            rpc_id = msg['id']
+            if 'id' in msg:
+                res['id'] = msg['id']
 
             # Check if the method exists
             if method not in self.funcs:
@@ -83,9 +82,6 @@ class JSONRPCServer:
                     raise TypeError('Invalid params')
             else:
                 res['result'] = func()
-
-            # Place the id on the response
-            res['id'] = rpc_id
         except json.JSONDecodeError:
             res['id'] = None
             res['error'] = {'code': -32700, 'message': 'Parse error'}
@@ -93,13 +89,10 @@ class JSONRPCServer:
             res['id'] = None
             res['error'] = {'code': -32600, 'message': 'Invalid Request'}
         except KeyError:
-            res['id'] = msg.get('id')
             res['error'] = {'code': -32601, 'message': 'Method not found'}
         except TypeError:
-            res['id'] = msg.get('id')
             res['error'] = {'code': -32602, 'message': 'Invalid params'}
         except (ArithmeticError, Exception):
-            res['id'] = msg.get('id')
             res['error'] = {'code': -32603, 'message': 'Internal error'}
 
         return res
@@ -120,40 +113,44 @@ class JSONRPCServer:
             responses = []
             for m in msgs:
                 response = self.process_request(json.dumps(m))
-                if response is not None:
-                    responses.append(response)
-            if not responses:
-                return None
+                responses.append(response)
             return responses
 
         response = self.process_request(msg)
-        if response is not None:
-            return response
-        return None
+        return response
 
     def handle_client(self, conn):
         """Handles the client connection."""
         keepAlive = True
+
         while keepAlive:
-            #Receive message
+            # Receive message
             msg = conn.recv(1024).decode()
             print('Received:', msg)
 
-            #Process message
+            # Process message
             res = self.process_msg(msg)
 
-            #Send response
-            if res is not None:
+            # Send response
+            if isinstance(res, list):
+                batch_response = []
+                for r in res:
+                    if 'id' in r:
+                        batch_response.append(r)
+                conn.send(json.dumps(batch_response).encode())
+            elif 'id' in res:
                 conn.send(json.dumps(res).encode())
 
-            #Check if the client wants to keep the connection alive
-            if res["result"] == "keepAlive":
+            # Check if the client wants to keep the connection alive
+            if isinstance(res, list):
+                for r in res:
+                    if 'result' in r and r['result'] == 'keepAlive':
+                        keepAlive = True
+                    else:
+                        keepAlive = False
+            elif 'result' in res and res['result'] == 'keepAlive':
                 keepAlive = True
             else:
-                keepAlive = False
-
-            #Check if the client wants to exit
-            if res["result"] == "exit":
                 keepAlive = False
 
 
@@ -168,8 +165,8 @@ if __name__ == "__main__":
     server.register('sub', functions.sub)
     server.register('mul', functions.mul)
     server.register('div', functions.div)
-    server.register('exit', functions.exit)
     server.register('keepAlive', functions.keepAlive)
+    server.register('exit', functions.closeConnection)
 
     # Start the server
     server.start()
