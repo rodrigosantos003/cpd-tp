@@ -121,9 +121,9 @@ class JSONRPCServer:
 
     def handle_client(self, conn):
         """Handles the client connection."""
-        keepAlive = True
+        keep_alive = True
 
-        while keepAlive:
+        while keep_alive:
             # Receive message
             msg = conn.recv(1024).decode()
             print('Received:', msg)
@@ -144,14 +144,11 @@ class JSONRPCServer:
             # Check if the client wants to keep the connection alive
             if isinstance(res, list):
                 for r in res:
-                    if 'result' in r and r['result'] == 'keepAlive':
-                        keepAlive = True
-                    else:
-                        keepAlive = False
+                    keep_alive = 'result' in r and r['result'] == 'keepAlive'
             elif 'result' in res and res['result'] == 'keepAlive':
-                keepAlive = True
+                keep_alive = True
             else:
-                keepAlive = False
+                keep_alive = False
 
 
 if __name__ == "__main__":
