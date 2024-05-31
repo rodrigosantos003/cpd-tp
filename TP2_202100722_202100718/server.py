@@ -35,8 +35,6 @@ class JSONRPCServer:
                 conn, _ = self.sock.accept()
                 self.handle_client(conn)
 
-                conn.close()
-
         except ConnectionAbortedError:
             pass
         except OSError:
@@ -51,9 +49,6 @@ class JSONRPCServer:
         res = {'jsonrpc': '2.0'}
 
         try:
-            # Load the json from the request
-            msg = json.loads(msg)
-
             # Check if the request is valid
             if 'method' not in msg:
                 raise ValueError('Invalid Request')
@@ -74,7 +69,11 @@ class JSONRPCServer:
                 if 'params' in msg:
                     params = msg['params']
 
-                    if len(params) == len(func_params):
+                    if isinstance(params, dict):
+                        # Named parameters
+                        res['result'] = func(**params)
+                    elif len(params) == len(func_params):
+                        # Positional parameters
                         res['result'] = func(*params)
                     else:
                         raise TypeError('Invalid params')
@@ -82,9 +81,6 @@ class JSONRPCServer:
                     raise TypeError('Invalid params')
             else:
                 res['result'] = func()
-        except json.JSONDecodeError:
-            res['id'] = None
-            res['error'] = {'code': -32700, 'message': 'Parse error'}
         except ValueError:
             res['id'] = None
             res['error'] = {'code': -32600, 'message': 'Invalid Request'}
@@ -101,6 +97,17 @@ class JSONRPCServer:
         """Process the request message and build a response"""
         try:
             msgs = json.loads(msg)
+
+            # Check if there are multiple requests on the message
+            if isinstance(msgs, list):
+                responses = []
+                for m in msgs:
+                    response = self.process_request(m)
+                    responses.append(response)
+                return responses
+
+            response = self.process_request(msgs)
+            return response
         except json.JSONDecodeError:
             return {'jsonrpc': '2.0',
                     'error': {
@@ -108,22 +115,12 @@ class JSONRPCServer:
                         'message': 'Parse error'},
                     'id': None}
 
-        # Check if there are multiple requests on the message
-        if isinstance(msgs, list):
-            responses = []
-            for m in msgs:
-                response = self.process_request(json.dumps(m))
-                responses.append(response)
-            return responses
-
-        response = self.process_request(msg)
-        return response
-
     def handle_client(self, conn):
         """Handles the client connection."""
-        keep_alive = True
 
-        while keep_alive:
+        keep_alive = False
+
+        while True:
             # Receive message
             msg = conn.recv(1024).decode()
             print('Received:', msg)
@@ -144,11 +141,22 @@ class JSONRPCServer:
             # Check if the client wants to keep the connection alive
             if isinstance(res, list):
                 for r in res:
-                    keep_alive = 'result' in r and r['result'] == 'keepAlive'
-            elif 'result' in res and res['result'] == 'keepAlive':
-                keep_alive = True
-            else:
-                keep_alive = False
+                    if 'id' not in r and 'result' in r:
+                        if r['result'] == 'keepAlive':
+                            keep_alive = True
+                        elif r['result'] == 'exit':
+                            break
+
+            if 'id' not in res and 'result' in res:
+                if res['result'] == 'keepAlive':
+                    keep_alive = True
+                elif res['result'] == 'exit':
+                    break
+
+            if not keep_alive:
+                break
+
+        conn.close()
 
 
 if __name__ == "__main__":

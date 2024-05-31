@@ -4,6 +4,7 @@
 
 import json
 import socket
+import time
 
 
 class JSONRPCClient:
@@ -60,25 +61,39 @@ class JSONRPCClient:
                 "id": self.ID
             })
             self.ID += 1
-        msg = self.send(json.dumps(batch_requests))
-        return json.loads(msg)
+        response = self.send(json.dumps(batch_requests))
+        return json.loads(response)
 
     def __getattr__(self, name):
         """Invokes a generic function."""
 
-        def inner(*params):
-            return self.invoke(name, params)
+        def inner(*args, **kwargs):
+            if kwargs:
+                return self.invoke(name, kwargs)
+            return self.invoke(name, list(args))
 
         return inner
+
+    def sendNotification(self, method):
+        """Sends a notification."""
+        req = {
+            "jsonrpc": "2.0",
+            "method": method
+        }
+        self.sock.sendall(json.dumps(req).encode())
 
 
 if __name__ == "__main__":
     # Test the JSONRPCClient class
     client = JSONRPCClient('127.0.0.1', 8000)
 
+    client.sendNotification('keepAlive')
+    time.sleep(0.1)
     # Single request example
-    res = client.div(2, 3)
+    res = client.div(a=2, b=3)
     print(res)
+
+    time.sleep(0.1)
 
     # Batch request example
     batch_requests = [
@@ -88,5 +103,11 @@ if __name__ == "__main__":
     ]
     batch_responses = client.batch(batch_requests)
     print(batch_responses)
+
+    time.sleep(0.1)
+
+    client.sendNotification('closeConnection')
+
+    time.sleep(0.1)
 
     client.close()
