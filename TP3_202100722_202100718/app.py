@@ -2,6 +2,7 @@
  Flask REST application
 
 """
+import sqlite3
 
 from flask import Flask, request, jsonify, make_response
 from models import Database
@@ -43,25 +44,26 @@ def user_register():
     Does not require authorization.
 
     """
-    # Get required fields
-    name = request.form.get('name', type=str)
-    email = request.form.get('email', type=str)
-    username = request.form.get('username', type=str)
-    password = request.form.get('password', type=str)
-
-    if not name or not email or not username or not password:
+    fields = get_required_fields(['name', 'email', 'username', 'password'])
+    if fields is None:
         return make_response(jsonify({'error': 'Missing required fields'}), 400)
 
     # Create user on database and send response
     try:
-        db.execute_query(
+        user_id = db.execute_update(
             stmt='INSERT INTO user VALUES(null, ?, ?, ?, ?)',
-            args=(name, email, username, password)
+            args=(fields[0], fields[1], fields[2], fields[3])
         )
 
-        return make_response(jsonify({'success': 'User registered successfully'}), 200)
+        return make_response(jsonify({'message': 'User registered successfully', 'user': {
+            'id': user_id,
+            'name': fields[0],
+            'email': fields[1],
+            'username': fields[2],
+            'password': fields[3]
+        }}), 201)
     except Exception:
-        return make_response(jsonify({'error': 'Failed to register user'}), 500)
+        return make_response(jsonify({'message': 'Error: Failed to register user'}), 500)
 
 
 @app.route('/api/user/', methods=['GET', 'PUT'])
@@ -73,32 +75,33 @@ def user_detail():
     """
     user = get_valid_user(request.authorization)
     if user is None:
-        return make_response(jsonify({"error": "Invalid credentials"}), 403)
+        return make_response(jsonify({"message": "Error: Invalid credentials"}), 403)
 
     # Returns user data
     if request.method == 'GET':
         return make_response(jsonify(user), 200)
     # Updates user data
     else:
-        # Get required fields
-        name = request.form.get('name', type=str)
-        email = request.form.get('email', type=str)
-        username = request.form.get('username', type=str)
-        password = request.form.get('password', type=str)
-
-        if not name or not email or not username or not password:
-            return make_response(jsonify({'error': 'Missing required fields'}), 400)
+        fields = get_required_fields(['name', 'email', 'username', 'password'])
+        if fields is None:
+            return make_response(jsonify({'message': 'Error: Missing required fields'}), 400)
 
         # Update user on database
         try:
             db.execute_query(
                 stmt='UPDATE user SET name=?, email=?, username=?, password=? WHERE id=?',
-                args=(name, email, username, password, user['id'])
+                args=(fields[0], fields[1], fields[2], fields[3], user['id'])
             )
 
-            return make_response(jsonify({'success': 'User updated successfully'}), 200)
+            return make_response(jsonify({'message': 'User updated successfully', 'user': {
+                'id': user['id'],
+                'name': fields[0],
+                'email': fields[1],
+                'username': fields[2],
+                'password': fields[3]
+            }}), 200)
         except Exception:
-            return make_response(jsonify({'error': 'Failed to update user'}), 500)
+            return make_response(jsonify({'message': 'Error: Failed to update user'}), 500)
 
 
 @app.route('/api/projects/', methods=['GET', 'POST'])
@@ -189,7 +192,24 @@ def get_valid_user(auth):
         auth.password,
     )).fetchone()
 
+    if not user:
+        return None
+
     return user
+
+
+def get_required_fields(required_fields):
+    """
+    Returns the required fields from the request
+    :param required_fields: List of required fields
+    :return: List of required fields if all are present, error message otherwise
+    """
+    missing_fields = [field for field in required_fields if not request.form.get(field)]
+    if missing_fields:
+        return None
+
+    values = [request.form.get(field) for field in required_fields]
+    return values
 
 
 if __name__ == "__main__":

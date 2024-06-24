@@ -35,7 +35,9 @@ class Database:
 
     def execute_update(self, stmt, args=()):
         """Executes an insert or update and returns the last row id."""
-        with self.conn.cursor() as cursor:
-            cursor.execute(stmt, args)
-            self.conn.commit()
-            return cursor.lastrowid
+        cursor = self.conn.cursor()
+        cursor.execute(stmt, args)
+        self.conn.commit()
+        uid = cursor.lastrowid
+        cursor.close()
+        return uid
