@@ -63,7 +63,7 @@ class TestUsers(TestBase):
         credentials = auth_header('homer', '1234')
         res = self.client.get('/api/user/', headers=credentials)
         self.assertEqual(res.status_code, 200)
-        self.assertIn('homer', res.get_json()['username'])
+        self.assertIn('homer', res.get_json()['user']['username'])
 
     def test_user_update(self):
         credentials = auth_header('homer', '1234')
@@ -105,3 +105,10 @@ class TestTasks(TestBase):
         ))
         self.assertEqual(res.status_code, 201)
         self.assertIn('Task added successfully', res.get_json()['message'])
+
+    def test_get_task_with_id(self):
+        """Tests task list endpoint"""
+        credentials = auth_header('homer', '1234')
+        res = self.client.get('/api/projects/1/tasks/1/', headers=credentials)
+        self.assertEqual(res.status_code, 200)
+        self.assertIn('id', res.get_json()['task'])

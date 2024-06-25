@@ -86,7 +86,7 @@ def user_detail():
 
     # Returns user data
     if request.method == 'GET':
-        return make_response(jsonify(user), 200)
+        return make_response(jsonify({'user': user}), 200)
     # Updates user data
     else:
         fields = get_required_fields(request.form, ['name', 'email', 'username', 'password'])
@@ -198,13 +198,22 @@ def task_detail(pk, task_pk):
     Requires authorization.
 
     """
+    user = get_valid_user(db, request.authorization)
+    if user is None:
+        return make_response(jsonify({"message": "Error: Invalid credentials"}), 403)
+
+    if not is_user_project(db, pk, user['id']):
+        return make_response(
+            jsonify({'message': 'The requested project doesnt belong to the logged user'}),
+            403)
+
     if request.method == 'GET':
         # Returns a task
         task = db.execute_query(
             stmt='SELECT * FROM task WHERE project_id=? and id=?',
             args=(pk, task_pk)
         ).fetchone()
-        return make_response(jsonify(task))
+        return make_response(jsonify({'task': task}))
     elif request.method == 'PUT':
         # Updates a task
         pass
