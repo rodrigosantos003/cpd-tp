@@ -53,3 +53,28 @@ def is_user_project(db, project_id, user_id):
 
     except (sqlite3.Error, Exception):
         return False
+
+
+def is_project_collaborator(db, project_id, user_id):
+    try:
+        collaborator = db.execute_query(stmt='SELECT * FROM collaborator WHERE project_id=? AND user_id=?',
+                                        args=(project_id, user_id)).fetchone()
+        if collaborator:
+            return True
+
+        return False
+
+    except (sqlite3.Error, Exception):
+        return False
+
+
+def is_task_manager(db, task_id, user_id):
+    try:
+        task = db.execute_query(stmt='SELECT * FROM task WHERE id=?', args=(task_id,)).fetchone()
+        if task['manager_id'] == user_id:
+            return True
+
+        return False
+
+    except (sqlite3.Error, Exception):
+        return False

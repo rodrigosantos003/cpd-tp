@@ -10,6 +10,9 @@ CREATE TABLE user (
 
 INSERT INTO user VALUES (null, 'Homer Simpson', 'homer@simpsons.org', 'homer', '1234');
 INSERT INTO user VALUES (null, 'Bart Simpson', 'bart@simpsons.org', 'bart', '1234');
+INSERT INTO user VALUES (null, 'Lisa Simpson', 'lisa@simpsons.org', 'lisa', '1234');
+INSERT INTO user VALUES (null, 'Marge Simpson', 'marge@simpsons.org', 'marge', '1234');
+INSERT INTO user VALUES (null, 'Maggie Simpson', 'maggie@simpsons.org', 'maggie', '1234');
 
 
 -- PROJECTS
@@ -33,17 +36,30 @@ DROP TABLE IF EXISTS task;
 CREATE TABLE task (
     id INTEGER PRIMARY KEY,
     project_id INTEGER,
+    manager INTEGER,
     title TEXT,
     creation_date TEXT,
     completed INTEGER,
     FOREIGN KEY(project_id) REFERENCES project(id)
+    FOREIGN KEY(manager) REFERENCES user(id)
 );
 
-INSERT INTO task VALUES (null, 1, 'Search for doughnuts', '2020-05-05', 1);
-INSERT INTO task VALUES (null, 1, 'Eat cream', '2020-05-05', 0);
-INSERT INTO task VALUES (null, 2, 'Eat vegetables everyday', '2020-05-10', 1);
-INSERT INTO task VALUES (null, 2, 'Eat doughnuts everyday', '2020-05-11', 1);
-INSERT INTO task VALUES (null, 2, 'Eat lots of sugar', '2020-05-12', 0);
-INSERT INTO task VALUES (null, 3, 'See who needs to be saved', '2020-05-07', 0);
-INSERT INTO task VALUES (null, 3, 'Save those who needs to be saved', '2020-05-07', 0);
-INSERT INTO task VALUES (null, 3, 'Save those from being not saved', '2020-05-08', '1');
+INSERT INTO task VALUES (null, 1, 1, 'Search for doughnuts', '2020-05-05', 1);
+INSERT INTO task VALUES (null, 1, 1, 'Eat cream', '2020-05-05', 0);
+INSERT INTO task VALUES (null, 2, 1, 'Eat vegetables everyday', '2020-05-10', 1);
+INSERT INTO task VALUES (null, 2, 1, 'Eat doughnuts everyday', '2020-05-11', 1);
+INSERT INTO task VALUES (null, 2, 1, 'Eat lots of sugar', '2020-05-12', 0);
+INSERT INTO task VALUES (null, 3, 2, 'See who needs to be saved', '2020-05-07', 0);
+INSERT INTO task VALUES (null, 3, 2, 'Save those who needs to be saved', '2020-05-07', 0);
+INSERT INTO task VALUES (null, 3, 2, 'Save those from being not saved', '2020-05-08', '1');
+
+-- COLLABORATORS
+
+DROP TABLE IF EXISTS collaborators;
+CREATE TABLE collaborators (
+    id INTEGER PRIMARY KEY,
+    project_id INTEGER,
+    user_id INTEGER,
+    FOREIGN KEY(project_id) REFERENCES project(id),
+    FOREIGN KEY(user_id) REFERENCES user(id)
+);

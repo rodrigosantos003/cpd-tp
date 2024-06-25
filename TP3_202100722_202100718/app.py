@@ -7,7 +7,7 @@ import sqlite3
 from datetime import date
 from flask import Flask, request, jsonify, make_response
 from models import Database
-from utils import get_valid_user, get_required_fields, is_user_project
+from utils import get_valid_user, get_required_fields, is_user_project, is_project_collaborator, is_task_manager
 
 # ==========
 #  Settings
@@ -123,8 +123,19 @@ def project_list():
         return make_response(jsonify({"message": "Error: Invalid credentials"}), 403)
 
     if request.method == 'GET':
-        # Returns the list of projects of a user
-        projects = db.execute_query('SELECT * FROM project WHERE user_id=?', (user['id'],)).fetchall()
+        # Returns the list of projects of the user or where the user is a collaborator
+        projects = db.execute_query(
+            stmt='''
+            SELECT *, 'owner' as role FROM project 
+            WHERE user_id=? 
+            UNION 
+            SELECT project.*, 'collaborator' as role FROM project 
+            JOIN collaborators ON project.id = collaborators.project_id 
+            WHERE collaborators.user_id=?
+            ''',
+            args=(user['id'], user['id'])
+        ).fetchall()
+
         return make_response(jsonify({"projects": projects}))
     else:
         # Adds a project to the list
@@ -162,9 +173,9 @@ def project_detail(pk):
     if user is None:
         return make_response(jsonify({"message": "Error: Invalid credentials"}), 403)
 
-    if not is_user_project(db, pk, user['id']):
+    if not ((request.method == 'GET' and is_project_collaborator(db, pk, user['id'])) or is_user_project(db, pk, user['id'])):
         return make_response(
-            jsonify({'message': 'The requested project doesnt belong to the logged user'}),
+            jsonify({'message': 'The requested project doesnt belong to the logged user or the user is not a collaborator'}),
             403)
 
     if request.method == 'GET':
@@ -211,6 +222,72 @@ def project_detail(pk):
         pass
 
 
+@app.route('/api/projects/<int:pk>/collaborators/', methods=['GET', 'POST', 'DELETE'])
+def collaborator_list(pk):
+    """
+    Collaborator list.
+    Requires authorization
+
+    """
+
+    user = get_valid_user(db, request.authorization)
+    if user is None:
+        return make_response(jsonify({"message": "Error: Invalid credentials"}), 403)
+
+    if not ((request.method == 'GET' and is_project_collaborator(db, pk, user['id'])) or is_user_project(db, pk, user['id'])):
+        return make_response(
+            jsonify({'message': 'The requested project doesnt belong to the logged user or the user is not a collaborator'}),
+            403)
+
+    if request.method == 'GET':
+        # Returns the list of collaborators of a project
+        collaborators = db.execute_query(
+            stmt='SELECT * FROM collaborator WHERE project_id=?',
+            args=(pk,)
+        ).fetchall()
+        return make_response(jsonify({"collaborators": collaborators}))
+
+    if request.method == 'POST':
+        # Adds a collaborator to the project
+        fields = get_required_fields(request.form, ['user_id'])
+        if fields is None:
+            return make_response(jsonify({'message': 'Error: Missing required fields'}), 400)
+
+        try:
+            db.execute_update(
+                stmt='INSERT INTO collaborator VALUES(?, ?)',
+                args=(pk, fields[0])
+            )
+
+            return make_response(jsonify({'message': 'Collaborator added successfully', 'collaborator': {
+                'project_id': pk,
+                'user_id': fields[0]
+            }}), 201)
+
+        except (sqlite3.Error, Exception):
+            return make_response(jsonify({'message': 'Error adding collaborator'}), 500)
+        pass
+
+    else:
+        # Deletes a collaborator from the project
+        fields = get_required_fields(request.form, ['user_id'])
+        if fields is None:
+            return make_response(jsonify({'message': 'Error: Missing required fields'}), 400)
+
+        try:
+            # Checks if the user_id is a collaborator
+            if not is_project_collaborator(db, pk, fields[0]):
+                return make_response(jsonify({'message': 'Error: User is not a collaborator'}), 400)
+
+            db.execute_query('DELETE FROM collaborator WHERE project_id=? AND user_id=?', (pk, fields[0]))
+
+            return make_response(jsonify({'message': 'Collaborator deleted successfully'}), 200)
+
+        except (sqlite3.Error, Exception):
+            return make_response(jsonify({'message': 'Error deleting collaborator'}), 500)
+        pass
+
+
 @app.route('/api/projects/<int:pk>/tasks/', methods=['GET', 'POST'])
 def task_list(pk):
     """
@@ -222,9 +299,9 @@ def task_list(pk):
     if user is None:
         return make_response(jsonify({"message": "Error: Invalid credentials"}), 403)
 
-    if not is_user_project(db, pk, user['id']):
+    if not ((request.method == 'GET' and is_project_collaborator(db, pk, user['id'])) or is_user_project(db, pk, user['id'])):
         return make_response(
-            jsonify({'message': 'The requested project doesnt belong to the logged user'}),
+            jsonify({'message': 'The requested project doesnt belong to the logged user or the user is not a collaborator'}),
             403)
 
     # Returns the list of tasks of a project
@@ -242,12 +319,13 @@ def task_list(pk):
 
         try:
             task_id = db.execute_update(
-                stmt='INSERT INTO task VALUES (null, ?, ?, ?, ?)',
-                args=(pk, fields[0], creation_date, 0))
+                stmt='INSERT INTO task VALUES (null, ?, ?, ?, ?, ?)',
+                args=(pk, pk, fields[0], creation_date, 0))
 
             return make_response(jsonify({'message': 'Task added successfully', 'task': {
                 'id': task_id,
                 'project_id': pk,
+                'manager': pk,
                 'title': fields[0],
                 'creation_date': creation_date,
                 'completed': 0
@@ -267,9 +345,9 @@ def task_detail(pk, task_pk):
     if user is None:
         return make_response(jsonify({"message": "Error: Invalid credentials"}), 403)
 
-    if not is_user_project(db, pk, user['id']):
+    if not ((request.method == 'GET' or request.method == 'PUT' and is_project_collaborator(db, pk, user['id'])) or is_user_project(db, pk, user['id'])):
         return make_response(
-            jsonify({'message': 'The requested project doesnt belong to the logged user'}),
+            jsonify({'message': 'The requested project doesnt belong to the logged user or the user is not a collaborator'}),
             403)
 
     if request.method == 'GET':
