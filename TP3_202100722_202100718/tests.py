@@ -55,8 +55,8 @@ class TestUsers(TestBase):
             username='johndoe',
             password='password123'
         ))
-        self.assertEqual(response.status_code, 200)
-        self.assertIn('User registered successfully', response.get_json()['success'])
+        self.assertEqual(response.status_code, 201)
+        self.assertIn('User registered successfully', response.get_json()['message'])
 
     def test_user_detail(self):
         """Tests user detail"""
@@ -74,7 +74,7 @@ class TestUsers(TestBase):
             password='newpassword123'
         ))
         self.assertEqual(res.status_code, 200)
-        self.assertIn('User updated successfully', res.get_json()['success'])
+        self.assertIn('User updated successfully', res.get_json()['message'])
 
 
 class TestProjects(TestBase):
@@ -89,3 +89,19 @@ class TestTasks(TestBase):
 
     def setUp(self):
         super().setUp()
+
+    def test_get_tasks(self):
+        """Tests task list endpoint"""
+        credentials = auth_header('homer', '1234')
+        res = self.client.get('/api/projects/1/tasks/', headers=credentials)
+        self.assertEqual(res.status_code, 200)
+        self.assertIsInstance(res.get_json()['tasks'], list)
+
+    def test_add_task(self):
+        """Tests add task endpoint"""
+        credentials = auth_header('homer', '1234')
+        res = self.client.post('/api/projects/1/tasks/', headers=credentials, data=dict(
+            title='task_test'
+        ))
+        self.assertEqual(res.status_code, 201)
+        self.assertIn('Task added successfully', res.get_json()['message'])

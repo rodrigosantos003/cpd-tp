@@ -4,8 +4,10 @@
 """
 import sqlite3
 
+from datetime import date
 from flask import Flask, request, jsonify, make_response
 from models import Database
+from utils import get_valid_user, get_required_fields, is_user_project
 
 # ==========
 #  Settings
@@ -19,7 +21,7 @@ app.config['DEBUG'] = True
 #  Database
 # ==========
 
-# Creates an sqlite database in memory
+# Creates a sqlite database in memory
 db = Database(filename=':memory:', schema='schema.sql')
 db.recreate()
 
@@ -30,6 +32,10 @@ db.recreate()
 
 @app.route('/')
 def index():
+    """
+    Index page
+    :return:
+    """
     return app.send_static_file('index.html')
 
 
@@ -44,9 +50,10 @@ def user_register():
     Does not require authorization.
 
     """
-    fields = get_required_fields(['name', 'email', 'username', 'password'])
+    # Get data
+    fields = get_required_fields(request.form, ['name', 'email', 'username', 'password'])
     if fields is None:
-        return make_response(jsonify({'error': 'Missing required fields'}), 400)
+        return make_response(jsonify({'message': 'Error: Missing required fields'}), 400)
 
     # Create user on database and send response
     try:
@@ -62,7 +69,7 @@ def user_register():
             'username': fields[2],
             'password': fields[3]
         }}), 201)
-    except Exception:
+    except (sqlite3.Error, Exception):
         return make_response(jsonify({'message': 'Error: Failed to register user'}), 500)
 
 
@@ -73,7 +80,7 @@ def user_detail():
     Requires authorization.
 
     """
-    user = get_valid_user(request.authorization)
+    user = get_valid_user(db, request.authorization)
     if user is None:
         return make_response(jsonify({"message": "Error: Invalid credentials"}), 403)
 
@@ -82,7 +89,7 @@ def user_detail():
         return make_response(jsonify(user), 200)
     # Updates user data
     else:
-        fields = get_required_fields(['name', 'email', 'username', 'password'])
+        fields = get_required_fields(request.form, ['name', 'email', 'username', 'password'])
         if fields is None:
             return make_response(jsonify({'message': 'Error: Missing required fields'}), 400)
 
@@ -100,7 +107,7 @@ def user_detail():
                 'username': fields[2],
                 'password': fields[3]
             }}), 200)
-        except Exception:
+        except (sqlite3.Error, Exception):
             return make_response(jsonify({'message': 'Error: Failed to update user'}), 500)
 
 
@@ -146,13 +153,42 @@ def task_list(pk):
     Requires authorization.
 
     """
+    user = get_valid_user(db, request.authorization)
+    if user is None:
+        return make_response(jsonify({"message": "Error: Invalid credentials"}), 403)
+
+    if not is_user_project(db, pk, user['id']):
+        return make_response(
+            jsonify({'message': 'The requested project doesnt belong to the logged user'}),
+            403)
+
+    # Returns the list of tasks of a project
     if request.method == 'GET':
-        # Returns the list of tasks of a project
         tasks = db.execute_query('SELECT * FROM task WHERE project_id=?', (pk,)).fetchall()
-        return make_response(jsonify(tasks))
+        return make_response(jsonify({"tasks": tasks}))
+
+    # Adds a task to project
     else:
-        # Adds a task to project
-        pass
+        fields = get_required_fields(request.form, ['title'])
+        if fields is None:
+            return make_response(jsonify({'message': 'Error: Missing required fields'}), 400)
+
+        creation_date = date.today().strftime('%Y-%m-%d')
+
+        try:
+            task_id = db.execute_update(
+                stmt='INSERT INTO task VALUES (null, ?, ?, ?, ?)',
+                args=(pk, fields[0], creation_date, 0))
+
+            return make_response(jsonify({'message': 'Task added successfully', 'task': {
+                'id': task_id,
+                'project_id': pk,
+                'title': fields[0],
+                'creation_date': creation_date,
+                'completed': 0
+            }}), 201)
+        except (sqlite3.Error, Exception):
+            return make_response(jsonify({'message': 'Error adding task'}), 500)
 
 
 @app.route('/api/projects/<int:pk>/tasks/<int:task_pk>/', methods=['GET', 'PUT', 'DELETE'])
@@ -164,7 +200,10 @@ def task_detail(pk, task_pk):
     """
     if request.method == 'GET':
         # Returns a task
-        task = db.execute_query('SELECT * FROM task WHERE project_id=? and id=?', (pk, task_pk)).fetchone()
+        task = db.execute_query(
+            stmt='SELECT * FROM task WHERE project_id=? and id=?',
+            args=(pk, task_pk)
+        ).fetchone()
         return make_response(jsonify(task))
     elif request.method == 'PUT':
         # Updates a task
@@ -172,44 +211,6 @@ def task_detail(pk, task_pk):
     else:
         # Deletes a task
         pass
-
-
-# ===========
-#  Auxiliary functions
-# ===========
-
-def get_valid_user(auth):
-    """
-    Checks if the given credentials are valid and returns its user
-    :param auth: Request authorization header
-    :return: User if the credentials are valid, null otherwise
-    """
-    if not request.authorization:
-        return None
-
-    user = db.execute_query(f'SELECT * FROM user WHERE username=? AND password=?', (
-        auth.username,
-        auth.password,
-    )).fetchone()
-
-    if not user:
-        return None
-
-    return user
-
-
-def get_required_fields(required_fields):
-    """
-    Returns the required fields from the request
-    :param required_fields: List of required fields
-    :return: List of required fields if all are present, error message otherwise
-    """
-    missing_fields = [field for field in required_fields if not request.form.get(field)]
-    if missing_fields:
-        return None
-
-    values = [request.form.get(field) for field in required_fields]
-    return values
 
 
 if __name__ == "__main__":
