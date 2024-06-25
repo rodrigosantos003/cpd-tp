@@ -83,6 +83,45 @@ class TestProjects(TestBase):
     def setUp(self):
         super().setUp()
 
+    def test_get_projects(self):
+        """Tests project list endpoint"""
+        credentials = auth_header('homer', '1234')
+        res = self.client.get('/api/projects/', headers=credentials)
+        self.assertEqual(res.status_code, 200)
+        self.assertIsInstance(res.get_json()['projects'], list)
+
+    def test_add_project(self):
+        """Tests add project endpoint"""
+        credentials = auth_header('homer', '1234')
+        res = self.client.post('/api/projects/', headers=credentials, data=dict(
+            title='project_test'
+        ))
+        self.assertEqual(res.status_code, 201)
+        self.assertIn('Project added successfully', res.get_json()['message'])
+
+    def test_get_project_with_id(self):
+        """Tests project list endpoint"""
+        credentials = auth_header('homer', '1234')
+        res = self.client.get('/api/projects/1/', headers=credentials)
+        self.assertEqual(res.status_code, 200)
+        self.assertIn('id', res.get_json()['project'])
+
+    def test_update_project(self):
+        """Tests update project endpoint"""
+        credentials = auth_header('homer', '1234')
+        res = self.client.put('/api/projects/1/', headers=credentials, data=dict(
+            title='project_test_updated'
+        ))
+        self.assertEqual(res.status_code, 200)
+        self.assertIn('Project updated successfully', res.get_json()['message'])
+
+    def test_delete_project(self):
+        """Tests delete project endpoint"""
+        credentials = auth_header('homer', '1234')
+        res = self.client.delete('/api/projects/1/', headers=credentials)
+        self.assertEqual(res.status_code, 200)
+        self.assertIn('Project deleted successfully', res.get_json()['message'])
+
 
 class TestTasks(TestBase):
     """Tests for the tasks endpoints."""
@@ -112,3 +151,20 @@ class TestTasks(TestBase):
         res = self.client.get('/api/projects/1/tasks/1/', headers=credentials)
         self.assertEqual(res.status_code, 200)
         self.assertIn('id', res.get_json()['task'])
+
+    def test_update_task(self):
+        """Tests update task endpoint"""
+        credentials = auth_header('homer', '1234')
+        res = self.client.put('/api/projects/1/tasks/1/', headers=credentials, data=dict(
+            completed=0,
+            title='task_test_updated'
+        ))
+        self.assertEqual(res.status_code, 200)
+        self.assertIn('Task updated successfully', res.get_json()['message'])
+
+    def test_delete_task(self):
+        """Tests delete task endpoint"""
+        credentials = auth_header('homer', '1234')
+        res = self.client.delete('/api/projects/1/tasks/1/', headers=credentials)
+        self.assertEqual(res.status_code, 200)
+        self.assertIn('Task deleted successfully', res.get_json()['message'])
