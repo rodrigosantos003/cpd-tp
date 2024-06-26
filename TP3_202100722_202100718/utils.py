@@ -4,25 +4,28 @@ Auxiliary functions
 import sqlite3
 
 
-def get_valid_user(db, auth):
+def get_valid_user(db, auth, bcrypt):
     """
     Checks if the given credentials are valid and returns its user
     :param db: Database object
     :param auth: Request authorization header
+    :param bcrypt: Bcrypt object
     :return: User if the credentials are valid, null otherwise
     """
     if not auth:
         return None
 
     try:
-        user = db.execute_query(f'SELECT * FROM user WHERE username=? AND password=?', (
-            auth.username,
-            auth.password,
-        )).fetchone()
+        user = db.execute_query(
+            stmt='SELECT * FROM user WHERE username=?',
+            args=(auth.username,)).fetchone()
     except (sqlite3.Error, Exception):
         return None
 
     if not user:
+        return None
+
+    if not bcrypt.check_password_hash(user['password'], auth.password):
         return None
 
     return user

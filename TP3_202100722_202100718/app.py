@@ -6,6 +6,7 @@ import sqlite3
 
 from datetime import date
 from flask import Flask, request, jsonify, make_response
+from flask_bcrypt import Bcrypt
 from models import Database
 from utils import get_valid_user, get_required_fields, is_user_project, is_project_collaborator, is_task_manager
 
@@ -16,6 +17,7 @@ from utils import get_valid_user, get_required_fields, is_user_project, is_proje
 app = Flask(__name__)
 app.config['STATIC_URL_PATH'] = '/static'
 app.config['DEBUG'] = True
+bcrypt = Bcrypt(app)
 
 # ==========
 #  Database
@@ -57,9 +59,11 @@ def user_register():
 
     # Create user on database and send response
     try:
+        hashed_password = bcrypt.generate_password_hash(fields[3]).decode('utf-8')
+
         user_id = db.execute_update(
             stmt='INSERT INTO user VALUES(null, ?, ?, ?, ?)',
-            args=(fields[0], fields[1], fields[2], fields[3])
+            args=(fields[0], fields[1], fields[2], hashed_password)
         )
 
         return make_response(jsonify({'message': 'User registered successfully', 'user': {
@@ -67,9 +71,10 @@ def user_register():
             'name': fields[0],
             'email': fields[1],
             'username': fields[2],
-            'password': fields[3]
+            'password': hashed_password
         }}), 201)
-    except (sqlite3.Error, Exception):
+    except (sqlite3.Error, Exception) as e:
+        app.logger.error('%s', str(e))
         return make_response(jsonify({'message': 'Error: Failed to register user'}), 500)
 
 
@@ -80,9 +85,9 @@ def user_detail():
     Requires authorization.
 
     """
-    user = get_valid_user(db, request.authorization)
+    user = get_valid_user(db, request.authorization, bcrypt)
     if user is None:
-        return make_response(jsonify({"message": "Error: Invalid credentials"}), 403)
+        return make_response(jsonify({"message": "Error: Invalid credentials"}), 401)
 
     # Returns user data
     if request.method == 'GET':
@@ -107,7 +112,8 @@ def user_detail():
                 'username': fields[2],
                 'password': fields[3]
             }}), 200)
-        except (sqlite3.Error, Exception):
+        except (sqlite3.Error, Exception) as e:
+            app.logger.error('%s', str(e))
             return make_response(jsonify({'message': 'Error: Failed to update user'}), 500)
 
 
@@ -118,9 +124,9 @@ def project_list():
     Requires authorization.
 
     """
-    user = get_valid_user(db, request.authorization)
+    user = get_valid_user(db, request.authorization, bcrypt)
     if user is None:
-        return make_response(jsonify({"message": "Error: Invalid credentials"}), 403)
+        return make_response(jsonify({"message": "Error: Invalid credentials"}), 401)
 
     if request.method == 'GET':
         # Returns the list of projects of the user or where the user is a collaborator
@@ -130,8 +136,8 @@ def project_list():
             WHERE user_id=? 
             UNION 
             SELECT project.*, 'collaborator' as role FROM project 
-            JOIN collaborators ON project.id = collaborators.project_id 
-            WHERE collaborators.user_id=?
+            JOIN collaborator ON project.id = collaborator.project_id 
+            WHERE collaborator.user_id=?
             ''',
             args=(user['id'], user['id'])
         ).fetchall()
@@ -144,20 +150,21 @@ def project_list():
             return make_response(jsonify({'message': 'Error: Missing required fields'}), 400)
 
         try:
-            currentDate = date.today().strftime('%Y-%m-%d')
+            current_date = date.today().strftime('%Y-%m-%d')
             project_id = db.execute_update(
                 stmt='INSERT INTO project VALUES (null, ?, ?, ?, ?)',
-                args=(user['id'], fields[0], currentDate, currentDate)
+                args=(user['id'], fields[0], current_date, current_date)
             )
 
             return make_response(jsonify({'message': 'Project added successfully', 'project': {
                 'id': project_id,
                 'user_id': user['id'],
                 'title': fields[0],
-                'creation_date': currentDate,
-                'last_update': currentDate
+                'creation_date': current_date,
+                'last_update': current_date
             }}), 201)
-        except (sqlite3.Error, Exception):
+        except (sqlite3.Error, Exception) as e:
+            app.logger.error('%s', str(e))
             return make_response(jsonify({'message': 'Error adding project'}), 500)
         pass
 
@@ -169,13 +176,15 @@ def project_detail(pk):
     Requires authorization.
 
     """
-    user = get_valid_user(db, request.authorization)
+    user = get_valid_user(db, request.authorization, bcrypt)
     if user is None:
-        return make_response(jsonify({"message": "Error: Invalid credentials"}), 403)
+        return make_response(jsonify({"message": "Error: Invalid credentials"}), 401)
 
-    if not ((request.method == 'GET' and is_project_collaborator(db, pk, user['id'])) or is_user_project(db, pk, user['id'])):
+    if not ((request.method == 'GET' and is_project_collaborator(db, pk, user['id'])) or
+            is_user_project(db, pk, user['id'])):
         return make_response(
-            jsonify({'message': 'The requested project doesnt belong to the logged user or the user is not a collaborator'}),
+            jsonify({'message': 'The requested project doesnt belong to the logged user or the user is not a '
+                                'collaborator'}),
             403)
 
     if request.method == 'GET':
@@ -212,7 +221,8 @@ def project_detail(pk):
                 'last_update': date.today().strftime('%Y-%m-%d')
             }}), 200)
 
-        except (sqlite3.Error, Exception):
+        except (sqlite3.Error, Exception) as e:
+            app.logger.error('%s', str(e))
             return make_response(jsonify({'message': 'Error updating project'}), 500)
         pass
     else:
@@ -230,13 +240,15 @@ def collaborator_list(pk):
 
     """
 
-    user = get_valid_user(db, request.authorization)
+    user = get_valid_user(db, request.authorization, bcrypt)
     if user is None:
-        return make_response(jsonify({"message": "Error: Invalid credentials"}), 403)
+        return make_response(jsonify({"message": "Error: Invalid credentials"}), 401)
 
-    if not ((request.method == 'GET' and is_project_collaborator(db, pk, user['id'])) or is_user_project(db, pk, user['id'])):
+    if not ((request.method == 'GET' and is_project_collaborator(db, pk, user['id'])) or
+            is_user_project(db, pk, user['id'])):
         return make_response(
-            jsonify({'message': 'The requested project doesnt belong to the logged user or the user is not a collaborator'}),
+            jsonify({'message': 'The requested project doesnt belong to the logged user or the user is not a '
+                                'collaborator'}),
             403)
 
     if request.method == 'GET':
@@ -254,17 +266,19 @@ def collaborator_list(pk):
             return make_response(jsonify({'message': 'Error: Missing required fields'}), 400)
 
         try:
+            collaborator_id = int(fields[0])
             db.execute_update(
-                stmt='INSERT INTO collaborator VALUES(?, ?)',
-                args=(pk, fields[0])
+                stmt='INSERT INTO collaborator VALUES(null, ?, ?)',
+                args=(pk, collaborator_id)
             )
 
             return make_response(jsonify({'message': 'Collaborator added successfully', 'collaborator': {
                 'project_id': pk,
-                'user_id': fields[0]
+                'user_id': collaborator_id
             }}), 201)
 
-        except (sqlite3.Error, Exception):
+        except (sqlite3.Error, Exception) as e:
+            app.logger.error('%s', str(e))
             return make_response(jsonify({'message': 'Error adding collaborator'}), 500)
         pass
 
@@ -277,13 +291,14 @@ def collaborator_list(pk):
         try:
             # Checks if the user_id is a collaborator
             if not is_project_collaborator(db, pk, fields[0]):
-                return make_response(jsonify({'message': 'Error: User is not a collaborator'}), 400)
+                return make_response(jsonify({'message': 'Error: User is not a collaborator'}), 404)
 
             db.execute_query('DELETE FROM collaborator WHERE project_id=? AND user_id=?', (pk, fields[0]))
 
             return make_response(jsonify({'message': 'Collaborator deleted successfully'}), 200)
 
-        except (sqlite3.Error, Exception):
+        except (sqlite3.Error, Exception) as e:
+            app.logger.error('%s', str(e))
             return make_response(jsonify({'message': 'Error deleting collaborator'}), 500)
         pass
 
@@ -295,13 +310,15 @@ def task_list(pk):
     Requires authorization.
 
     """
-    user = get_valid_user(db, request.authorization)
+    user = get_valid_user(db, request.authorization, bcrypt)
     if user is None:
-        return make_response(jsonify({"message": "Error: Invalid credentials"}), 403)
+        return make_response(jsonify({"message": "Error: Invalid credentials"}), 401)
 
-    if not ((request.method == 'GET' and is_project_collaborator(db, pk, user['id'])) or is_user_project(db, pk, user['id'])):
+    if not ((request.method == 'GET' and is_project_collaborator(db, pk, user['id']))
+            or is_user_project(db, pk, user['id'])):
         return make_response(
-            jsonify({'message': 'The requested project doesnt belong to the logged user or the user is not a collaborator'}),
+            jsonify({'message': 'The requested project doesnt belong to the logged user or the user is not a '
+                                'collaborator'}),
             403)
 
     # Returns the list of tasks of a project
@@ -330,7 +347,8 @@ def task_list(pk):
                 'creation_date': creation_date,
                 'completed': 0
             }}), 201)
-        except (sqlite3.Error, Exception):
+        except (sqlite3.Error, Exception) as e:
+            app.logger.error('%s', str(e))
             return make_response(jsonify({'message': 'Error adding task'}), 500)
 
 
@@ -341,29 +359,27 @@ def task_detail(pk, task_pk):
     Requires authorization.
 
     """
-    user = get_valid_user(db, request.authorization)
+    user = get_valid_user(db, request.authorization, bcrypt)
     if user is None:
-        return make_response(jsonify({"message": "Error: Invalid credentials"}), 403)
+        return make_response(jsonify({"message": "Error: Invalid credentials"}), 401)
 
-    if not ((request.method == 'GET' or request.method == 'PUT' and is_project_collaborator(db, pk, user['id'])) or is_user_project(db, pk, user['id'])):
+    if not ((request.method == 'GET' or request.method == 'PUT' and is_project_collaborator(db, pk, user['id'])) or
+            is_user_project(db, pk, user['id'])):
         return make_response(
-            jsonify({'message': 'The requested project doesnt belong to the logged user or the user is not a collaborator'}),
+            jsonify({'message': 'The requested project doesnt belong to the logged user or the user is not a '
+                                'collaborator'}),
             403)
 
-    if request.method == 'GET':
-        # Returns a task
-        task = db.execute_query(
-            stmt='SELECT * FROM task WHERE project_id=? and id=?',
-            args=(pk, task_pk)
-        ).fetchone()
-        return make_response(jsonify({'task': task}))
-    elif request.method == 'PUT':
-        # Updates a task
-        task = db.execute_query(
-            stmt='SELECT * FROM task WHERE project_id=? and id=?',
-            args=(pk, task_pk)
-        ).fetchone()
+    task = db.execute_query(
+        stmt='SELECT * FROM task WHERE project_id=? and id=?',
+        args=(pk, task_pk)
+    ).fetchone()
 
+    # Returns a task
+    if request.method == 'GET':
+        return make_response(jsonify({'task': task}))
+    # Updates a task
+    elif request.method == 'PUT':
         fields = get_required_fields(request.form, ['title', 'completed'])
 
         if fields is None:
@@ -382,14 +398,13 @@ def task_detail(pk, task_pk):
                 'creation_date': task['creation_date'],
                 'completed': fields[1]
             }}), 200)
-        except (sqlite3.Error, Exception):
+        except (sqlite3.Error, Exception) as e:
+            app.logger.error('%s', str(e))
             return make_response(jsonify({'message': 'Error updating task'}), 500)
-        pass
     else:
         # Deletes a task
         db.execute_query('DELETE FROM task WHERE id=?', (task_pk,))
         return make_response(jsonify({'message': 'Task deleted successfully'}), 200)
-        pass
 
 
 if __name__ == "__main__":

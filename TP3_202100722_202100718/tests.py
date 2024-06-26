@@ -45,7 +45,7 @@ class TestUsers(TestBase):
         """Tests the user with incorrect credentials."""
         credentials = auth_header('no-user', 'no-password')
         res = self.client.get('/api/user/', headers=credentials)
-        self.assertEqual(res.status_code, 403)
+        self.assertEqual(res.status_code, 401)
 
     def test_user_register(self):
         """Tests user registration"""
