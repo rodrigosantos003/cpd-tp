@@ -134,6 +134,7 @@ class TestTasks(TestBase):
         credentials = auth_header('homer', '1234')
         res = self.client.get('/api/projects/1/tasks/', headers=credentials)
         self.assertEqual(res.status_code, 200)
+        self.assertIn('tasks', res.get_json())
         self.assertIsInstance(res.get_json()['tasks'], list)
 
     def test_add_task(self):
@@ -168,3 +169,36 @@ class TestTasks(TestBase):
         res = self.client.delete('/api/projects/1/tasks/1/', headers=credentials)
         self.assertEqual(res.status_code, 200)
         self.assertIn('Task deleted successfully', res.get_json()['message'])
+
+
+class TestCollaborators(TestBase):
+    def setUp(self):
+        super().setUp()
+
+    def test_get_collaborators(self):
+        credentials = auth_header('homer', '1234')
+        res = self.client.get('/api/projects/1/collaborators/', headers=credentials)
+        self.assertEqual(res.status_code, 200)
+        self.assertIn('collaborators', res.get_json())
+        self.assertIsInstance(res.get_json()['collaborators'], list)
+
+    def test_add_collaborator(self):
+        credentials = auth_header('homer', '1234')
+        res = self.client.post('/api/projects/1/collaborators/', headers=credentials, data={
+            'user_id': '2'
+        })
+        self.assertEqual(res.status_code, 201)
+        self.assertIn('Collaborator added successfully', res.get_json()['message'])
+        self.assertIn('collaborator', res.get_json())
+
+    def test_remove_collaborator(self):
+        credentials = auth_header('homer', '1234')
+        self.client.post('/api/projects/1/collaborators/', headers=credentials, data={
+            'user_id': '2'
+        })
+        res = self.client.delete('/api/projects/1/collaborators/', headers=credentials, data={
+            'user_id': '2'
+        })
+        self.assertEqual(res.status_code, 200)
+        self.assertIn('Collaborator removed successfully', res.get_json()['message'])
+

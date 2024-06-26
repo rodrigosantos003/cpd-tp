@@ -166,7 +166,6 @@ def project_list():
         except (sqlite3.Error, Exception) as e:
             app.logger.error('%s', str(e))
             return make_response(jsonify({'message': 'Error adding project'}), 500)
-        pass
 
 
 @app.route('/api/projects/<int:pk>/', methods=['GET', 'PUT', 'DELETE'])
@@ -224,12 +223,10 @@ def project_detail(pk):
         except (sqlite3.Error, Exception) as e:
             app.logger.error('%s', str(e))
             return make_response(jsonify({'message': 'Error updating project'}), 500)
-        pass
     else:
         # Deletes a project
         db.execute_query('DELETE FROM project WHERE id=?', (pk,))
         return make_response(jsonify({'message': 'Project deleted successfully'}), 200)
-        pass
 
 
 @app.route('/api/projects/<int:pk>/collaborators/', methods=['GET', 'POST', 'DELETE'])
@@ -280,7 +277,6 @@ def collaborator_list(pk):
         except (sqlite3.Error, Exception) as e:
             app.logger.error('%s', str(e))
             return make_response(jsonify({'message': 'Error adding collaborator'}), 500)
-        pass
 
     else:
         # Deletes a collaborator from the project
@@ -295,12 +291,10 @@ def collaborator_list(pk):
 
             db.execute_query('DELETE FROM collaborator WHERE project_id=? AND user_id=?', (pk, fields[0]))
 
-            return make_response(jsonify({'message': 'Collaborator deleted successfully'}), 200)
-
+            return make_response(jsonify({'message': 'Collaborator removed successfully'}), 200)
         except (sqlite3.Error, Exception) as e:
             app.logger.error('%s', str(e))
             return make_response(jsonify({'message': 'Error deleting collaborator'}), 500)
-        pass
 
 
 @app.route('/api/projects/<int:pk>/tasks/', methods=['GET', 'POST'])
@@ -386,6 +380,11 @@ def task_detail(pk, task_pk):
             return make_response(jsonify({'message': 'Error: Missing required fields'}), 400)
 
         try:
+            if not is_task_manager(db, task_pk, user['id']):
+                return make_response(jsonify({'message': 'Cant update the task: '
+                                                         'The user is not the task manager'}),
+                                     403)
+
             db.execute_query(
                 stmt='UPDATE task SET title=?, completed=? WHERE id=?',
                 args=(fields[0], fields[1], task_pk)
@@ -402,6 +401,11 @@ def task_detail(pk, task_pk):
             app.logger.error('%s', str(e))
             return make_response(jsonify({'message': 'Error updating task'}), 500)
     else:
+        if not is_task_manager(db, task_pk, user['id']):
+            return make_response(jsonify({'message': 'Cant update the task: '
+                                                     'The user is not the task manager'}),
+                                 403)
+
         # Deletes a task
         db.execute_query('DELETE FROM task WHERE id=?', (task_pk,))
         return make_response(jsonify({'message': 'Task deleted successfully'}), 200)

@@ -55,7 +55,6 @@ INSERT INTO task VALUES (null, 3, 2, 'Save those who needs to be saved', '2020-0
 INSERT INTO task VALUES (null, 3, 2, 'Save those from being not saved', '2020-05-08', '1');
 
 -- COLLABORATORS
-
 DROP TABLE IF EXISTS collaborator;
 CREATE TABLE collaborator (
     id INTEGER PRIMARY KEY,
