@@ -63,3 +63,5 @@ CREATE TABLE collaborator (
     FOREIGN KEY(project_id) REFERENCES project(id),
     FOREIGN KEY(user_id) REFERENCES user(id)
 );
+
+INSERT INTO collaborator VALUES (null, 1, 1)
