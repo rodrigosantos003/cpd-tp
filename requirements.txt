@@ -1,0 +1,5 @@
+Flask
+Flask-SQLAlchemy
+pylint
+pytest
+pytest-flask
