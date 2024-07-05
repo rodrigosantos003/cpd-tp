@@ -3,3 +3,4 @@ Flask-SQLAlchemy
 pylint
 pytest
 pytest-flask
+flask_bcrypt
